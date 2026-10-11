@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: advisories
+    description: Crop health advisory operations
+  - name: dashboard
+    description: Dashboard summary operations
+  - name: profile
+    description: Farmer profile operations
 paths:
   /healthz:
     get:
@@ -24,6 +30,113 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /advisories:
+    get:
+      operationId: listAdvisories
+      tags: [advisories]
+      summary: List and filter crop advisories
+      parameters:
+        - name: cropName
+          in: query
+          schema: { type: string }
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [Low, Moderate, High, Critical]
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching advisories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Advisory" }
+    post:
+      operationId: createAdvisory
+      tags: [advisories]
+      summary: Generate and save a crop advisory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdvisoryInput" }
+      responses:
+        "201":
+          description: Generated advisory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+  /advisories/{id}:
+    get:
+      operationId: getAdvisory
+      tags: [advisories]
+      summary: Retrieve an advisory report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Advisory report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+        "404":
+          description: Advisory not found
+    delete:
+      operationId: deleteAdvisory
+      tags: [advisories]
+      summary: Delete an advisory report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Advisory deleted
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard statistics and recent advisories
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get the current demo profile
+      responses:
+        "200":
+          description: Farmer profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+    put:
+      operationId: updateProfile
+      tags: [profile]
+      summary: Update the current demo profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileInput" }
+      responses:
+        "200":
+          description: Updated farmer profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
 components:
   schemas:
     HealthStatus:
@@ -33,4 +146,122 @@ components:
           type: string
       required:
         - status
+    Severity:
+      type: string
+      enum: [Low, Moderate, High, Critical]
+    GrowthStage:
+      type: string
+      enum: [Germination, Vegetative, Flowering, Fruiting, Maturation]
+    AdvisoryDiagnosis:
+      type: object
+      properties:
+        diagnosisSummary: { type: string }
+        identifiedIssue: { type: string }
+        confidenceScore: { type: number, minimum: 0, maximum: 100 }
+        severityLevel: { $ref: "#/components/schemas/Severity" }
+        organicTreatments:
+          type: array
+          items: { type: string }
+        chemicalTreatments:
+          type: array
+          items: { type: string }
+        preventiveMeasures:
+          type: array
+          items: { type: string }
+        estimatedYieldImpact: { type: string }
+      required:
+        - diagnosisSummary
+        - identifiedIssue
+        - confidenceScore
+        - severityLevel
+        - organicTreatments
+        - chemicalTreatments
+        - preventiveMeasures
+        - estimatedYieldImpact
+    Advisory:
+      allOf:
+        - $ref: "#/components/schemas/AdvisoryInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            diagnosis: { $ref: "#/components/schemas/AdvisoryDiagnosis" }
+            createdAt: { type: string, format: date-time }
+          required: [id, diagnosis, createdAt]
+    AdvisoryInput:
+      type: object
+      properties:
+        cropName: { type: string, minLength: 1, maxLength: 100 }
+        growthStage: { $ref: "#/components/schemas/GrowthStage" }
+        soilPh: { type: number, minimum: 3, maximum: 10 }
+        nitrogen: { type: integer, minimum: 0, maximum: 100000 }
+        phosphorus: { type: integer, minimum: 0, maximum: 100000 }
+        potassium: { type: integer, minimum: 0, maximum: 100000 }
+        temperatureC: { type: number, minimum: -20, maximum: 70 }
+        humidityPercent: { type: number, minimum: 0, maximum: 100 }
+        rainfallMm: { type: number, minimum: 0, maximum: 10000 }
+        symptomDescription: { type: string, minLength: 5, maxLength: 3000 }
+        imageBase64: { type: ["string", "null"], maxLength: 10000000 }
+        imageMimeType:
+          type: ["string", "null"]
+          enum: [image/jpeg, image/png, image/webp, null]
+        region: { type: string, maxLength: 120 }
+      required:
+        - cropName
+        - growthStage
+        - soilPh
+        - nitrogen
+        - phosphorus
+        - potassium
+        - temperatureC
+        - humidityPercent
+        - symptomDescription
+    DashboardSummary:
+      type: object
+      properties:
+        totalAdvisories: { type: integer }
+        highRiskCount: { type: integer }
+        cropCount: { type: integer }
+        latestAdvisory:
+          oneOf:
+            - $ref: "#/components/schemas/Advisory"
+            - type: "null"
+        recentAdvisories:
+          type: array
+          items: { $ref: "#/components/schemas/Advisory" }
+        severityCounts:
+          type: object
+          properties:
+            Low: { type: integer }
+            Moderate: { type: integer }
+            High: { type: integer }
+            Critical: { type: integer }
+          required: [Low, Moderate, High, Critical]
+      required:
+        - totalAdvisories
+        - highRiskCount
+        - cropCount
+        - latestAdvisory
+        - recentAdvisories
+        - severityCounts
+    Profile:
+      type: object
+      properties:
+        fullName: { type: string }
+        region: { type: string }
+        role: { type: string, enum: [farmer, agronomist, admin] }
+        primaryCrops:
+          type: array
+          items: { type: string }
+      required: [fullName, region, role, primaryCrops]
+    ProfileInput:
+      type: object
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 120 }
+        region: { type: string, maxLength: 120 }
+        role: { type: string, enum: [farmer, agronomist, admin] }
+        primaryCrops:
+          type: array
+          maxItems: 10
+          items: { type: string, maxLength: 60 }
+      required: [fullName, region, role, primaryCrops]
 
